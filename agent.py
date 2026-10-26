@@ -107,8 +107,72 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     """
     session = new_session(query, wardrobe)
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
+    # Parse query using the model to extract description, size, and max_price
+    from generate import generate
+    parse_prompt = f"""Extract search parameters from this query:
+Query: "{query}"
+
+Return ONLY a JSON object with these fields (use null if not mentioned):
+- description: keywords describing the item
+- size: size if mentioned (e.g., "M", "S/M", "W30 L30")
+- max_price: maximum price as a number (no dollar sign)
+
+Example: {{"description": "vintage graphic tee", "size": "M", "max_price": 30}}"""
+
+    try:
+        import json
+        parsed_text = generate(parse_prompt)
+        # Extract JSON from response (might have extra text)
+        json_start = parsed_text.find('{')
+        json_end = parsed_text.rfind('}') + 1
+        if json_start >= 0 and json_end > json_start:
+            session["parsed"] = json.loads(parsed_text[json_start:json_end])
+        else:
+            # Fallback: basic parsing
+            session["parsed"] = {
+                "description": query,
+                "size": None,
+                "max_price": None
+            }
+    except Exception:
+        # Fallback to treating whole query as description
+        session["parsed"] = {
+            "description": query,
+            "size": None,
+            "max_price": None
+        }
+
+    # Call search_listings with parsed parameters
+    parsed = session["parsed"]
+    session["search_results"] = search_listings(
+        description=parsed.get("description", query),
+        size=parsed.get("size"),
+        max_price=parsed.get("max_price")
+    )
+
+    # BRANCH: Check if search returned results
+    if not session["search_results"]:
+        session["error"] = (
+            "No items found matching your search. Try: broadening your description, "
+            "increasing your price limit, or trying a different size."
+        )
+        return session
+
+    # Select first item from results
+    session["selected_item"] = session["search_results"][0]
+
+    # Get outfit suggestion
+    session["outfit_suggestion"] = suggest_outfit(
+        new_item=session["selected_item"],
+        wardrobe=session["wardrobe"]
+    )
+
+    # Create fit card
+    session["fit_card"] = create_fit_card(
+        outfit=session["outfit_suggestion"],
+        new_item=session["selected_item"]
+    )
+
     return session
 
 

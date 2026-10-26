@@ -99,7 +99,7 @@
 
 **How the query is parsed:** Asking the model to extract description, size, and max_price from the user's natural language query.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** query → parsed (description/size/max_price) → search_results → selected_item (first result) → wardrobe → outfit_suggestion → fit_card. If search_results is empty, error is set and flow stops before selected_item.
 
 ---
 
@@ -113,8 +113,29 @@
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30'
 
+Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Here are 2 outfit combinations using your new Y2K butterfly baby tee...
+  
+### Outfit 1: Classic Y2K Streetwear
+* Top: Y2K Butterfly Print Baby Tee
+* Bottoms: Baggy straight-leg jeans (dark wash)
+* Outerwear: Black cropped zip hoodie
+* Shoes: Chunky white sneakers
+* Accessories: Black crossbody bag
+
+### Outfit 2: Casual Vintage Contrast
+* Top: Y2K Butterfly Print Baby Tee
+* Bottoms: Wide-leg khaki trousers
+* Accessories: Brown leather belt, Vintage black denim jacket
+* Shoes: Black combat boots
+
+  Fit card: Found the ultimate Y2K baby tee on Depop for just $18 and I am literally 
+  obsessed with this butterfly print. 🦋 It's giving major early 2000s energy, especially 
+  styled with some baggy denim or chunky combat boots. Snagged a medium that fits more 
+  like a small, so it's the exact right kind of cropped. ✨
 ```
 
 **The three tools, tested one at a time**
