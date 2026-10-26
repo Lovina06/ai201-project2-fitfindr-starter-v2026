@@ -142,13 +142,14 @@ Example: {{"description": "vintage graphic tee", "size": "M", "max_price": 30}}"
             "max_price": None
         }
 
-    # Call search_listings with parsed parameters
+    # Call search_listings with parsed parameters (via MCP)
+    from mcp_client import call_tool
     parsed = session["parsed"]
-    session["search_results"] = search_listings(
-        description=parsed.get("description", query),
-        size=parsed.get("size"),
-        max_price=parsed.get("max_price")
-    )
+    session["search_results"] = call_tool("search_listings", {
+        "description": parsed.get("description", query),
+        "size": parsed.get("size"),
+        "max_price": parsed.get("max_price"),
+    })
 
     # BRANCH: Check if search returned results
     if not session["search_results"]:
