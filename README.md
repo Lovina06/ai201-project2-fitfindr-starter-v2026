@@ -39,7 +39,7 @@
 
 ## What This Does
 
-<!-- Three or four sentences: what a user asks for, and what they get back. -->
+FitFindr helps users discover thrifted clothing items and style them with their existing wardrobe. A user types a natural language query describing what they're looking for (e.g., "vintage graphic tee under $30 size M"), and the system searches through secondhand listings, suggests 1-2 outfit combinations using items they already own, and generates a social media-ready caption about the find. If no items match the search, the system provides helpful suggestions for broadening the query instead of proceeding with empty results.
 
 
 
@@ -198,17 +198,17 @@ $ python -c "from tools import create_fit_card; ..."
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
 
-**Moment 1**
+**Moment 1: Size matching in search_listings**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* Implement size filtering in search_listings to match user's size query against listing sizes.
+- *What came back:* Claude Code suggested simple substring matching (`if size_lower in lst_size_lower`), but warned that this would incorrectly match "s" in "us 9" or "l" in "xl", causing shoes to appear when someone asks for a small top.
+- *What I changed:* Added word-boundary aware matching using `.split()` to check if the size appears as a standalone token, plus special handling for compound sizes like "S/M" by splitting on "/". This prevents false matches while still catching valid compound sizes.
 
-**Moment 2**
+**Moment 2: Empty wardrobe path in suggest_outfit**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* Implement suggest_outfit to generate outfit suggestions using the item and wardrobe.
+- *What came back:* Claude Code implemented the function but initially focused only on the non-empty wardrobe case. The TODO comment explicitly said "It may be empty. Handle that" and warned that "Unit 4 has you trigger the empty wardrobe on purpose."
+- *What I changed:* Added a check for `wardrobe.get("items", [])` and branched on whether it's empty. Empty wardrobe gets a different prompt asking for general styling advice rather than specific combinations, ensuring the function never returns empty string and handles both paths gracefully.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
