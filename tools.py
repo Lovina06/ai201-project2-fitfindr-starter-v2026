@@ -241,4 +241,17 @@ Outfit suggestion: {outfit}
 
 Make it sound like a real person posting about their find, not a product description. Mention the price, platform, and capture the vibe. Be specific and enthusiastic."""
 
-    return generate(prompt)
+    result = generate(prompt)
+
+    # Validate sentence count (2-4 sentences as specified)
+    # Count by sentence-ending punctuation
+    sentence_count = result.count('.') + result.count('!') + result.count('?')
+
+    # If outside bounds, retry with explicit constraint
+    if sentence_count < 2 or sentence_count > 4:
+        constrained_prompt = f"""{prompt}
+
+IMPORTANT: Your response must be exactly 2-4 sentences. Count carefully."""
+        result = generate(constrained_prompt)
+
+    return result

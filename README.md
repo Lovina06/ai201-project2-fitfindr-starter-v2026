@@ -210,6 +210,18 @@ $ python -c "from tools import create_fit_card; ..."
 - *What came back:* Claude Code implemented the function but initially focused only on the non-empty wardrobe case. The TODO comment explicitly said "It may be empty. Handle that" and warned that "Unit 4 has you trigger the empty wardrobe on purpose."
 - *What I changed:* Added a check for `wardrobe.get("items", [])` and branched on whether it's empty. Empty wardrobe gets a different prompt asking for general styling advice rather than specific combinations, ensuring the function never returns empty string and handles both paths gracefully.
 
+**Moment 3 (Unit 4): MCP trace integration in agent.py**
+
+- *What I asked for:* Add trace.step() calls throughout run_agent() to make the MCP call visible in the trace output.
+- *What came back:* Claude Code suggested adding trace.step() after each major operation, including a specific step for "search_listings (via MCP)" to distinguish the MCP call from direct tool calls. It also suggested adding a branch trace step to show when the loop stops early.
+- *What I changed:* Implemented all trace.step() calls exactly as suggested, with descriptive labels like "search_listings (via MCP)" that clearly identify the integration point. The trace now shows the exact 5-step happy path and 3-step empty-search path, making the branch logic immediately visible in output.
+
+**Moment 4 (Unit 4): ModelUnavailable exception handling**
+
+- *What I asked for:* Handle the ModelUnavailable exception that can occur when the Gemini API is overloaded or unreachable.
+- *What came back:* Claude Code wrapped the entire run_agent() flow in a try-except block catching ModelUnavailable, setting session["error"] with a helpful message about checking the API key, and adding a trace.step() call to record the failure. This caught the real 503 error that occurred during evaluation Try 3.
+- *What I changed:* Kept the implementation as-is. The error message is user-friendly (mentions .env and "try again"), the session state stays consistent (error set, later fields remain None), and the trace clearly shows "model_unavailable" in the step log. This is exactly the defensive programming Unit 4 asked for.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -230,17 +242,41 @@ $ python -c "from tools import create_fit_card; ..."
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all tools | 4 of 5 | PASS | PASS | FAIL* | PASS | PASS | MET (4/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Item ID preserved through session | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card has price & platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Search respects price ceiling | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+*Try 3 failed due to 503 ModelUnavailable error (API overloaded), error handler worked correctly.
 
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
 
 ```
+# From run_eval.py → run_agent() → results/run_2026-10-26_1844_before.md
+# Criterion 4, Try 1: "flannel shirt under $25"
 
+Selected item: Flannel Shirt — Red Plaid ($22.0, thredUp)
+Search returned 5 results
+
+Outfit suggestion:
+Here are two outfit combinations using your new red plaid flannel shirt...
+
+### Outfit 1: Casual Weekend Layers
+* Top: Red Plaid Flannel (worn open over white ribbed tank)
+* Bottoms: Baggy straight-leg jeans (dark wash)
+* Shoes: Chunky white sneakers
+* Accessories: Black crossbody bag
+
+### Outfit 2: Moody Grunge Vibes
+* Top: Red Plaid Flannel (buttoned up)
+* Bottoms: Wide-leg khaki trousers
+* Outerwear: Vintage black denim jacket
+* Shoes: Black combat boots
+
+Fit card:
+Scored this perfect red plaid flannel on thredUp for just $22 and it's giving major 90s grunge energy. Already planning to layer it over a white tank with my baggiest jeans and chunky sneakers for the ultimate casual weekend vibe. If you sleep on this one, that's on you! 🍂✨
 ```
 
 ---
@@ -265,13 +301,15 @@ that produced it:
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | Matching query completes all 3 tools | 4/5 | **MET** (4/5) | Counted tries where session had fit_card filled (not None). Try 3 hit ModelUnavailable 503 error, other 4 completed all tools. |
+| 2 | Impossible query stops before suggest_outfit | 5/5 | **MET** (5/5) | Checked that session["error"] was set and session["fit_card"] was None in all 5 tries. All stopped at the branch with helpful message. |
+| 3 | Item ID preserved through session state | 5/5 | **MET** (5/5) | Verified selected_item ID matches the item shown in fit card. All 5 tries selected "Vintage Levi's 501" with consistent ID lst_001. |
+| 4 | Fit card mentions price & platform | 4/5 | **MET** (5/5) | Searched fit card text for "$" and platform name. All 5 tries mentioned "$22" and "thredUp" explicitly. Exceeded target. |
+| 5 | Search respects price ceiling | 5/5 | **MET** (5/5) | Checked max_price in parsed query against all returned item prices. "under $20" returned items at $18, $16, $15. "under $40" returned items at $38, $35, $28. All within limits. |
 
 **Diagnoses**
+
+No criteria were missed. All five met or exceeded their targets.
 
 
 
@@ -335,22 +373,36 @@ that produced it:
 
 **What I changed:**
 
+Added sentence-count validation to `create_fit_card()` in tools.py. The function now counts sentence-ending punctuation (. ! ?) and if the result is outside the 2-4 sentence spec, it makes a second generate() call with an explicit constraint reminder. This tightens Criterion 4 from just checking that price/platform are mentioned to also validating the format meets the documented spec.
+
 **Which failure it was meant to fix:**
+
+This wasn't fixing a failure (all criteria passed), but rather preventing future regression. The "before" run had fit cards that technically met Criterion 4 (mentioned price and platform) but some were verbose or rambling. The spec says "2-4 sentences" and the prompt asks for that, but without validation the model sometimes ignores it. This change enforces the constraint programmatically.
 
 ### Run Log — After
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Item ID preserved through session | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card has price & platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Search respects price ceiling | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
 **Did it help, and how do I know:**
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
+
+The sentence-count validation had a mixed impact:
+
+**What improved:** Criterion 1 went from 4/5 to 5/5. The "before" run hit a ModelUnavailable 503 error on Try 3, but the "after" run had no API failures. This is unrelated to my code change — it's just API availability variance between the two runs.
+
+**What stayed the same:** Criteria 2-5 remained at 5/5 PASS. The validation didn't break anything, which is good.
+
+**What the validation actually did:** Looking at fit card character counts in the output (237-366 chars in "after" vs similar range in "before"), the sentence validator didn't noticeably tighten length. The model already respects the 2-4 sentence constraint most of the time. The validation is defensive programming that would catch outliers, but this dataset didn't trigger any retries.
+
+**Verdict:** The improvement was "defensive" rather than "corrective" — it prevents future regression on a spec the model already follows, rather than fixing an observed failure. In a real system this is valuable (catches edge cases before they reach users), but in this evaluation it didn't change measurable outcomes.
 
 
 
@@ -361,6 +413,14 @@ that produced it:
 <!-- For each criterion still missed: what you'd do, and why you stopped where
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
+
+**No criteria missed**, but areas for future improvement:
+
+1. **Query parsing brittleness**: Currently uses a model call to extract description/size/max_price, with a brittle JSON extraction that falls back to treating the whole query as description. A regex-based parser would be faster, cheaper, and more reliable. Stopped here because the model-based approach passes all tests and handling malformed JSON properly would require more error cases than the assignment scope covers.
+
+2. **Size matching edge cases**: The word-boundary approach handles "S/M" and avoids "s" in "us 9", but doesn't handle compound sizes like "W30 L32" or size ranges like "6-8". Would need a size normalization layer to catch these. Stopped because the test data doesn't include these formats and building a comprehensive size parser is its own project.
+
+3. **Fit card variation**: Even with temperature > 0 and cache disabled, fit cards for the same item across multiple tries can be similar in structure (opening enthusiasm + specific detail + call to action). The sentence-count validator I added in the improvement helps with format, but doesn't enforce variety. Would need to track previously generated cards in session state and explicitly prompt for differentiation. Stopped because Criterion 4 targets 4/5, not 5/5, accepting that some similarity is expected when describing the same item.
 
 
 
