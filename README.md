@@ -292,19 +292,35 @@ that produced it:
 **Happy path**
 
 ```
-
+[1] parse_query
+      in:  dict with keys: query
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] suggest_outfit
+      in:  dict with keys: item, wardrobe
+      out: Here are 2 outfit combinations using your new Y2K butterfly baby tee and pieces from your wardrobe...
+[5] create_fit_card
+      out: Found the ultimate Y2K baby tee on Depop for just $18 and I am literally obsessed...
 ```
 
 **Empty search**
 
 ```
-
+[1] parse_query
+      in:  dict with keys: query
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[3] branch
+      →    empty search, stopping before suggest_outfit
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** Changed agent.py to call `mcp_client.call_tool("search_listings", {...})` instead of the direct `search_listings(...)` function call. Registered the tool in mcp_server.py with @mcp.tool() decorator, full description, and typed inputs. Behavior is identical - agent produces the same results through MCP as it did with direct calls. The MCP call is clearly visible in the trace as step [2] "search_listings (via MCP)".
 
 
 
