@@ -120,13 +120,45 @@ $ python app.py ask '...'
 **The three tools, tested one at a time**
 
 ```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
+$ python -c "from tools import search_listings; import json; results = search_listings('graphic tee', max_price=30); print(f'Found {len(results)} results'); print(json.dumps(results[0] if results else {}, indent=2))"
 
+Found 7 results
+{
+  "id": "lst_002",
+  "title": "Y2K Baby Tee — Butterfly Print",
+  "description": "Super cute early 2000s baby tee with butterfly graphic...",
+  "category": "tops",
+  "style_tags": ["y2k", "vintage", "graphic tee", "cottagecore"],
+  "size": "S/M",
+  "condition": "excellent",
+  "price": 18.0,
+  "colors": ["white", "pink", "purple"],
+  "brand": null,
+  "platform": "depop"
+}
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
 
+Here are two outfit combinations using your new vintage Levi's 501s and pieces from your existing wardrobe:
+
+### Look 1: Casual Streetwear & Monochrome Contrast
+* Top: White ribbed tank top
+* Outerwear: Vintage black denim jacket (worn open)
+* Shoes: Chunky white sneakers
+* Accessories: Black crossbody bag
+
+### Look 2: Cozy Retro Layers
+* Top: Oversized grey crewneck sweatshirt
+* Shoes: Black combat boots
+* Accessories: Brown leather belt, black crossbody bag
+```
+
+```
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('Pair with baggy straight-leg jeans and chunky white sneakers for effortless streetwear vibes', load_listings()[0]))"
+
+Still can't believe I scored these vintage Levi's 501s on Depop for just $38! The medium wash and natural knee fading are literally the definition of the perfect broken-in denim. Can't wait to style them with a chunky white sneaker and a baggy tee for the ultimate effortless streetwear fit.
 ```
 
 ```
