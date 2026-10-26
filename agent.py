@@ -62,54 +62,14 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Returns:
         The session dict. **Check session["error"] first** — if it isn't None,
         the run ended early and the later fields will still be None.
-
-    ─────────────────────────────────────────────────────────────────────────
-    TODO — build this, following the branch rule you wrote in Milestone 2.
-
-      1. Start a session with new_session().
-
-      2. Count the times round the loop, and call trace.check_iterations(count)
-         on each one before you go again. It raises when the count passes
-         MAX_ITERATIONS in config.py — see trace.py.
-
-      3. Parse the query into a description, a size, and a max_price. Regex,
-         string splitting, or asking the model are all fine — say which you
-         chose in your README. Put the result in session["parsed"].
-
-      4. Call search_listings() with what you parsed.
-         Put the results in session["search_results"].
-
-         ⚠️ THIS IS THE BRANCH. If nothing came back:
-              - put a message in session["error"] saying what the user could
-                change — "No results" is not that message
-              - return the session
-              - do NOT call suggest_outfit with nothing
-
-      5. Choose an item — the first result is fine. Put it in
-         session["selected_item"].
-
-      6. Call suggest_outfit() with the selected item and the wardrobe.
-         Put the result in session["outfit_suggestion"].
-
-      7. Call create_fit_card() with the outfit and the item.
-         Put the result in session["fit_card"].
-
-      8. Return the session.
-
-    ─────────────────────────────────────────────────────────────────────────
-    IN UNIT 4 you come back and add two things:
-
-      • Trace calls. One per step. `trace.step("search_listings", inputs=...,
-        returned=...)` — see trace.py. Your README needs the output.
-
-      • A handler for ModelUnavailable, so a bad key produces a message rather
-        than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    trace.start_trace()
 
-    # Parse query using the model to extract description, size, and max_price
-    from generate import generate
-    parse_prompt = f"""Extract search parameters from this query:
+    try:
+        # Parse query using the model to extract description, size, and max_price
+        from generate import generate
+        parse_prompt = f"""Extract search parameters from this query:
 Query: "{query}"
 
 Return ONLY a JSON object with these fields (use null if not mentioned):
@@ -119,62 +79,81 @@ Return ONLY a JSON object with these fields (use null if not mentioned):
 
 Example: {{"description": "vintage graphic tee", "size": "M", "max_price": 30}}"""
 
-    try:
-        import json
-        parsed_text = generate(parse_prompt)
-        # Extract JSON from response (might have extra text)
-        json_start = parsed_text.find('{')
-        json_end = parsed_text.rfind('}') + 1
-        if json_start >= 0 and json_end > json_start:
-            session["parsed"] = json.loads(parsed_text[json_start:json_end])
-        else:
-            # Fallback: basic parsing
+        try:
+            import json
+            parsed_text = generate(parse_prompt)
+            # Extract JSON from response (might have extra text)
+            json_start = parsed_text.find('{')
+            json_end = parsed_text.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                session["parsed"] = json.loads(parsed_text[json_start:json_end])
+            else:
+                # Fallback: basic parsing
+                session["parsed"] = {
+                    "description": query,
+                    "size": None,
+                    "max_price": None
+                }
+        except Exception:
+            # Fallback to treating whole query as description
             session["parsed"] = {
                 "description": query,
                 "size": None,
                 "max_price": None
             }
-    except Exception:
-        # Fallback to treating whole query as description
-        session["parsed"] = {
-            "description": query,
-            "size": None,
-            "max_price": None
+
+        trace.step("parse_query", inputs={"query": query}, returned=session["parsed"])
+
+        # Call search_listings with parsed parameters (via MCP)
+        from mcp_client import call_tool
+        parsed = session["parsed"]
+        search_inputs = {
+            "description": parsed.get("description", query),
+            "size": parsed.get("size"),
+            "max_price": parsed.get("max_price"),
         }
+        session["search_results"] = call_tool("search_listings", search_inputs)
+        trace.step("search_listings (via MCP)", inputs=search_inputs, returned=session["search_results"])
 
-    # Call search_listings with parsed parameters (via MCP)
-    from mcp_client import call_tool
-    parsed = session["parsed"]
-    session["search_results"] = call_tool("search_listings", {
-        "description": parsed.get("description", query),
-        "size": parsed.get("size"),
-        "max_price": parsed.get("max_price"),
-    })
+        # BRANCH: Check if search returned results
+        if not session["search_results"]:
+            session["error"] = (
+                "No items found matching your search. Try: broadening your description, "
+                "increasing your price limit, or trying a different size."
+            )
+            trace.step("branch", note="empty search, stopping before suggest_outfit")
+            return session
 
-    # BRANCH: Check if search returned results
-    if not session["search_results"]:
-        session["error"] = (
-            "No items found matching your search. Try: broadening your description, "
-            "increasing your price limit, or trying a different size."
+        # Select first item from results
+        session["selected_item"] = session["search_results"][0]
+        trace.step("select_item", returned=session["selected_item"])
+
+        # Get outfit suggestion
+        session["outfit_suggestion"] = suggest_outfit(
+            new_item=session["selected_item"],
+            wardrobe=session["wardrobe"]
         )
+        wardrobe_size = len(session["wardrobe"].get("items", []))
+        trace.step("suggest_outfit",
+                  inputs={"item": session["selected_item"].get("title"), "wardrobe": f"{wardrobe_size} items"},
+                  returned=session["outfit_suggestion"])
+
+        # Create fit card
+        session["fit_card"] = create_fit_card(
+            outfit=session["outfit_suggestion"],
+            new_item=session["selected_item"]
+        )
+        trace.step("create_fit_card", returned=session["fit_card"])
+
         return session
 
-    # Select first item from results
-    session["selected_item"] = session["search_results"][0]
-
-    # Get outfit suggestion
-    session["outfit_suggestion"] = suggest_outfit(
-        new_item=session["selected_item"],
-        wardrobe=session["wardrobe"]
-    )
-
-    # Create fit card
-    session["fit_card"] = create_fit_card(
-        outfit=session["outfit_suggestion"],
-        new_item=session["selected_item"]
-    )
-
-    return session
+    except ModelUnavailable as e:
+        session["error"] = (
+            "Could not reach the model to process your request. "
+            "Please check your API key in .env and try again."
+        )
+        trace.step("model_unavailable", note=f"API error: {str(e)}")
+        return session
 
 
 # ── running it directly ───────────────────────────────────────────────────────
