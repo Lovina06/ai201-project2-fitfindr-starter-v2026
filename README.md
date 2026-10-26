@@ -59,24 +59,24 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Searches the listings database for clothing items matching a text description, optionally filtered by size and maximum price.
+- **Inputs:** `description` (str), `size` (str | None), `max_price` (float | None)
+- **Returns:** A list of listing dicts (each with id, title, description, category, style_tags, size, condition, price, colors, brand, platform), sorted best match first, limited to config.SEARCH_RESULT_LIMIT.
+- **When it has nothing:** Returns an empty list `[]` (not None, not an exception).
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Calls the model to suggest one or two outfit combinations using the thrifted item and the user's existing wardrobe.
+- **Inputs:** `new_item` (dict - a listing dict), `wardrobe` (dict with 'items' key holding a list of wardrobe item dicts)
+- **Returns:** A non-empty string with outfit suggestions (specific combinations if wardrobe has items, general styling advice if wardrobe is empty).
+- **When it has nothing:** Never returns empty - if wardrobe is empty, returns general styling advice for the item instead of specific combinations.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Calls the model to generate a social media caption (2-4 sentences) about the thrifted find, incorporating the outfit suggestion and item details.
+- **Inputs:** `outfit` (str - the outfit suggestion from suggest_outfit), `new_item` (dict - the listing dict)
+- **Returns:** A 2-4 sentence caption string that reads like a real social post, mentions the item, price, and platform, and captures the vibe.
+- **When it has nothing:** If outfit is empty or whitespace, returns a descriptive error message rather than crashing (e.g., "Cannot create fit card: no outfit suggestion provided").
 
 ---
 
@@ -93,11 +93,11 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If search_listings returns an empty list, put a message in the session explaining what to try (broader description, higher max_price, different size) and stop before calling suggest_outfit. Otherwise, take the first result from the list, pass it to suggest_outfit with the user's wardrobe, then pass the outfit suggestion and item to create_fit_card, storing all results in the session.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Asking the model to extract description, size, and max_price from the user's natural language query.
 
 **What moves through the session:** <!-- which fields, in what order -->
 
